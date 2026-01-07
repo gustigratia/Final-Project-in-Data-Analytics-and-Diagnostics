@@ -14,25 +14,23 @@
   - Interpret cluster characteristics based on mortality, healthcare capacity, treatment types, and education level
 
   ---
-
+  
   ## 📂 Dataset
-
-  - **Source**: Global Health Statistics Dataset  
-  - **Download link**:  
-    👉 https://drive.google.com/file/d/1oDdnr6tlWEIbII6oTcoSlbfvc7BLEa1Q/view?usp=sharing  
-  - **Scope**:
-    - Country: **Germany**
-    - Year: **2024**
-    - Disease: **COVID-19**
-  - **Preprocessing**:
-    - Filtering by country, year, and disease
-    - Encoding categorical variables
-    - Min–Max normalization (0–1 scale)
-    - Feature selection for PCA
-
-  > ⚠️ **Note**:  
-  > The dataset file is larger than GitHub’s file size limit (100 MB), therefore it is **not stored directly in this repository**.  
-  > Please download the dataset manually using the link above and place it in the project directory before running the analysis.
+  
+  - **Source**: Kaggle – *Global Health Statistics*  
+  - **Dataset link**:  
+    👉 https://www.kaggle.com/datasets/malaiarasugraj/global-health-statistics/data  
+  
+  The dataset contains a wide range of **global health indicators**, including:
+  - Mortality rates  
+  - Communicable and non-communicable diseases  
+  - Risk factors  
+  - Public health and healthcare system statistics  
+  
+  For this project, the dataset was filtered to:
+  - **Country**: Germany  
+  - **Year**: 2024  
+  - **Disease**: COVID-19  
 
   ---
 
