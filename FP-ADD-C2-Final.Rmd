@@ -1,19 +1,30 @@
 ---
 title: "FP-ADD-KelompokC2"
-author: "1. Rafindra Nabiel Fawwaz_5026231024
-         2. Gusti Gratia Delpiera_5026231097
-         3. M. Naufal Erwin Effendi_5026231152
-         4. Gabriel Hadi Melvanto Sihaloho_5026231189"
+author: |
+  1. Rafindra Nabiel Fawwaz_5026231024  
+  2. Gusti Gratia Delpiera_5026231097  
+  3. M. Naufal Erwin Effendi_5026231152  
+  4. Gabriel Hadi Melvanto Sihaloho_5026231189
 date: "2024-12-15"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+set.seed(123)
 ```
 
-# Import semua library yang dibutuhkan. 
-Disini digunakan 5 library, yaitu cluster untuk analisis clustering, factoextra untuk visualisasi dari hasil clustering, reshape digunakan untuk data reshaping agar mempermudah manipulasi data sebelum analisis, ggplot digunakan untuk membuat visualisasi data
+# 1. Libraries
+
+This analysis uses:
+- **cluster**: clustering utilities
+- **factoextra**: PCA and clustering visualizations
+- **reshape2**: data reshaping (melt)
+- **ggplot2**: plotting
 
 ```{r}
 library(cluster)
@@ -22,178 +33,292 @@ library(reshape2)
 library(ggplot2)
 ```
 
-# DATA PREPARATION
-# Import Dataset
+# 2. Data Preparation
+
+## 2.1 Import Dataset
+
 ```{r}
 data <- read.csv("Global Health Statistics.csv")
-data
-```
-
-# Filtering Data
-Filter dataset hanya untuk negara Jerman dengan kasus COVID-19 tahun 2024, dan filter kolom yang tidak diperlukan seperti Country, Year, Disease Category dan Disease Name
-```{r}
-german_data <- subset(data, Country=="Germany")
-german_data <- subset(german_data, Year == 2024)
-german_data <- subset(german_data, Disease.Name == "COVID-19")
-german_data_filtered <- subset(german_data, select = -c(Country,Year,Disease.Category,Disease.Name))
-german_data_filtered
-dim(german_data_filtered)
-
-```
-
-# Melihat Ringkasan Statistik dataset dan dimensi dataset
-Dalam ringkasan statistik, dapat dilihat bahwa beberapa kolom masih memiliki tipe data berupa character sehingga perlu dilakukan encoding/label agar semua data memiliki tipe yang sama untuk memudahkan proses analisis
-```{r}
-summary(data)
+head(data)
 dim(data)
 ```
 
+## 2.2 Filtering (Germany, 2024, COVID-19)
 
-# Proses Encoding
-Ubah semua kolom yang masih bertipe karakter menjadi tipe numerik dengan encoding yaitu, mengonversi nilai kategorikalnya menggunakan fungsi factor sehingga didapatkan label:
-GENDER: Female  : 1
-        Male    : 2
-        Other   : 3
+We filter the dataset to:
+- `Country == "Germany"`
+- `Year == 2024`
+- `Disease.Name == "COVID-19"`
 
-Treatment Type:   Medication        : 1
-                  Surgery           : 2
-                  Therapy           : 3
-                  Vaccination       : 4
-                  
-Age Group:    0 - 18    : 1
-              19 - 35   : 2
-              36 - 60   : 3
-              61+       : 4
-              
-Availability of Vaccines treatment:   No: 1
-                                      Yes: 2
+Then remove non-analytical columns: `Country`, `Year`, `Disease.Category`, `Disease.Name`.
+
 ```{r}
-columns_to_factorize <- c("Age.Group", "Gender", "Treatment.Type", "Availability.of.Vaccines.Treatment")
+german_data <- subset(
+  data,
+  Country == "Germany" & Year == 2024 & Disease.Name == "COVID-19"
+)
 
-german_data_filtered[columns_to_factorize] <- lapply(german_data_filtered[columns_to_factorize], function(x) as.numeric(factor(x)))
+german_data_filtered <- subset(
+  german_data,
+  select = -c(Country, Year, Disease.Category, Disease.Name)
+)
 
-sapply(german_data_filtered, class)
-```
-
-# Melihat dimensi dataset dan cek nilai minimum, maksimum, rata-rata, dan standar deviasi tiap kolom
-```{r}
-summary(german_data_filtered)
+head(german_data_filtered)
 dim(german_data_filtered)
 ```
 
-# OUTLIER DETECTION
+## 2.3 Descriptive Summary (Filtered Germany Data)
 
-# Buat boxplot untuk setiap fitur/kolom
-Buat visualisasi boxplot untuk semua variabel dalam dataset german_data_filtered, reshape2::melt digunakan untuk mengubah data ke format panjang, dan menggunakan ggplot2 untuk memplot setiap variabel dengan skala bebas pada grid menggunakan facet_wrap. Boxplot digunakan untuk melihat adanya outlier dalam data
 ```{r}
+summary(german_data_filtered)
+sapply(german_data_filtered, class)
+```
 
+## 2.4 Encoding Categorical Variables
+
+To enable numeric analysis, categorical columns are encoded into numeric labels using `factor()`.
+This yields integer codes corresponding to the factor levels.
+
+Encoded columns:
+- `Age.Group`
+- `Gender`
+- `Treatment.Type`
+- `Availability.of.Vaccines.Treatment`
+
+```{r}
+columns_to_factorize <- c(
+  "Age.Group",
+  "Gender",
+  "Treatment.Type",
+  "Availability.of.Vaccines.Treatment"
+)
+
+german_data_filtered[columns_to_factorize] <- lapply(
+  german_data_filtered[columns_to_factorize],
+  function(x) as.numeric(factor(x))
+)
+
+sapply(german_data_filtered, class)
+summary(german_data_filtered)
+```
+
+# 3. Outlier Detection
+
+## 3.1 Boxplots (All Variables)
+
+Boxplots help identify potential outliers (points beyond whiskers).  
+Data are reshaped to long format with `reshape2::melt()`.
+
+```{r}
 boxplot_german <- reshape2::melt(german_data_filtered)
 
-ggplot(boxplot_german, aes(x = variable, y = value)) + 
+ggplot(boxplot_german, aes(x = variable, y = value)) +
   geom_boxplot() +
   labs(x = "Variable", y = "Value") +
-  facet_wrap(~variable, scales = "free") +
-  theme(axis.text.x = element_text(angle = 0,hjust=1))
+  facet_wrap(~ variable, scales = "free") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
 ```
-Berdasarkan visualisasi boxplot, semua nilai dalam setap kolom berada dalam rentang whisker tanpa adanya titik-titik data di luar whisker, menunjukkan bahwa tidak terdeteksi adanya outlier pada variabel-variabel dalam dataset ini. Distribusi setiap variabel tampak konsisten dengan nilai-nilai yang berada dalam rentang normal dan sesuai dengan batas interkuartil.
 
+**Interpretation:**  
+From the boxplots, no pronounced outliers are observed across variables (no clear points outside whiskers).
 
-# Buat Histogram untuk setiap fitur / kolom
-Buat Histogram untuk tiap kolom dengan function hist, visualisasi histogram digunakan untuk melihat distribusi tiap kolom.
+## 3.2 Histograms (All Variables)
+
+Histograms provide a quick view of each variable’s distribution.
+
 ```{r}
 for (col_name in names(german_data_filtered)) {
-  # Buat histogram
-  hist(german_data_filtered[[col_name]],
-       main = paste("Histogram of", col_name), 
-       xlab = col_name,                        
-       ylab = "Frequency",                     
-       col = "lightblue",
-       border = "black")
+  hist(
+    german_data_filtered[[col_name]],
+    main = paste("Histogram of", col_name),
+    xlab = col_name,
+    ylab = "Frequency",
+    col = "lightblue",
+    border = "black"
+  )
 }
 ```
-Hasil visualisasi histogram untuk setiap kolom menunjukkan bahwa distribusi data antar kolom sangat bervariasi, baik dari segi rentang nilai maupun pola distribusinya. Oleh karena itu, diperlukan normalisasi data untuk memastikan semua variabel berada pada skala yang sebanding, sehingga analisis lebih lanjut dapat dilakukan secara lebih akurat.
 
+**Interpretation:**  
+Variables show different ranges and distribution shapes, motivating normalization so that features are comparable in scale.
 
-# DATA NORMALIZATION
-# Normalisasi data dengan minmax scaling
-Normalisasi pada semua kolom dalam dataset dengan mengonversi nilainya ke rentang 0 hingga 1. Hasilnya, dataset saat ini memiliki nilai yang distandarisasi, sehingga setiap kolom dapat dibandingkan secara sebanding tanpa dipengaruhi oleh perbedaan skala aslinya.
+# 4. Data Normalization (Min–Max Scaling)
+
+We apply min–max scaling to map selected columns into the **[0, 1]** range.  
+A safeguard is included for constant columns (`max == min`) to avoid division-by-zero.
+
 ```{r}
 german_data_normalized <- german_data_filtered
-cols_to_normalize <- c("Prevalence.Rate....", "Incidence.Rate....", "Mortality.Rate....", 
-                       "Gender", "Population.Affected", "Healthcare.Access....",
-                       "Doctors.per.1000", "Hospital.Beds.per.1000", "Treatment.Type", 
-                       "Average.Treatment.Cost..USD.", "Availability.of.Vaccines.Treatment", 
-                       "Recovery.Rate....", "Improvement.in.5.Years....", "DALYs",
-                       "Per.Capita.Income..USD.", "Education.Index", "Urbanization.Rate....", "Age.Group")
 
-# Normalisasi semua kolom yang terpilih
-german_data_normalized[cols_to_normalize] <- lapply(german_data_normalized[cols_to_normalize], function(x) {
-  (x - min(x)) / (max(x) - min(x))
-})
-german_data_normalized
+cols_to_normalize <- c(
+  "Prevalence.Rate....",
+  "Incidence.Rate....",
+  "Mortality.Rate....",
+  "Gender",
+  "Population.Affected",
+  "Healthcare.Access....",
+  "Doctors.per.1000",
+  "Hospital.Beds.per.1000",
+  "Treatment.Type",
+  "Average.Treatment.Cost..USD.",
+  "Availability.of.Vaccines.Treatment",
+  "Recovery.Rate....",
+  "Improvement.in.5.Years....",
+  "DALYs",
+  "Per.Capita.Income..USD.",
+  "Education.Index",
+  "Urbanization.Rate....",
+  "Age.Group"
+)
+
+minmax <- function(x) {
+  rng <- max(x, na.rm = TRUE) - min(x, na.rm = TRUE)
+  if (rng == 0) return(rep(0, length(x)))
+  (x - min(x, na.rm = TRUE)) / rng
+}
+
+german_data_normalized[cols_to_normalize] <- lapply(
+  german_data_normalized[cols_to_normalize],
+  minmax
+)
+
+summary(german_data_normalized)
 ```
 
-# Principal Component Analysis
-Lakukan analisis PCA (Principal Component Analysis) pada subset data yang mencakup variabel "Hospital.Beds.per.1000," "Mortality.Rate," "Treatment.Type," dan "Education.Index," dengan data yang telah dinormalisasi. Fungsi prcomp() digunakan untuk menghitung komponen utama, dan summary(pca_result) memberikan ringkasan variansi yang dijelaskan oleh setiap komponen utama, termasuk proporsi variansi yang dijelaskan oleh masing-masing komponen.
+# 5. Principal Component Analysis (PCA)
+
+## 5.1 PCA on Selected Indicators
+
+PCA is performed on a subset of normalized variables:
+- `Hospital.Beds.per.1000`
+- `Mortality.Rate....`
+- `Treatment.Type`
+- `Education.Index`
+
+These variables reflect **healthcare capacity**, **severity outcomes**, **intervention/treatment profile**, and **socio-educational context**.
+
 ```{r}
-german_data_pca <- subset(german_data_normalized, select = c(Hospital.Beds.per.1000, Mortality.Rate...., Treatment.Type, Education.Index))
+german_data_pca <- subset(
+  german_data_normalized,
+  select = c(
+    Hospital.Beds.per.1000,
+    Mortality.Rate....,
+    Treatment.Type,
+    Education.Index
+  )
+)
+
 pca_result <- prcomp(german_data_pca, center = TRUE, scale. = TRUE)
-pca_result
 summary(pca_result)
+pca_result$rotation
 ```
 
-# Visualisasi Contribution PCA
-fviz_eig digunakan untuk memvisualisasikan eigenvalue atau proporsi variansi yang dijelaskan oleh masing-masing komponen utama dalam analisis PCA. visualisasikan kontribusi masing-masing variabel terhadap dua komponen utama pertama menggunakan fviz_pca_var, dengan warna yang menunjukkan kontribusi variabel, serta menggunakan fungsi repel untuk menghindari tumpang tindih label variabel.
+## 5.2 PCA Visualizations
+
+Eigenvalues show how much variance is explained by each principal component (PC).  
+The variable contribution plot indicates which variables most strongly define PC1 and PC2.
+
 ```{r}
-#PCA Result dengan Contribution
 fviz_eig(pca_result)
-fviz_pca_var(pca_result, axes = c(1,2), col.var = "contrib", gradient.cols = c("#00AFBB","#E7B800","#FC4E07"),repel = TRUE)
+
+fviz_pca_var(
+  pca_result,
+  axes = c(1, 2),
+  col.var = "contrib",
+  gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+  repel = TRUE
+)
 ```
 
-# Visualisasi Heatmap PCA
-Buat heatmap yang menunjukkan kontribusi setiap variabel terhadap komponen utama berdasarkan hasil PCA.     
+## 5.3 PCA Loading Heatmap
+
+The heatmap summarizes variable loadings (direction and magnitude) across PCs.
+
 ```{r}
 pca_loadings <- as.data.frame(pca_result$rotation)
 pca_loadings$Variable <- rownames(pca_loadings)
+
 melted_loadings <- melt(pca_loadings, id.vars = "Variable")
+
 ggplot(melted_loadings, aes(x = variable, y = Variable, fill = value)) +
   geom_tile() +
-  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
-                       midpoint = 0, limit = c(-1, 1), name = "Contribution") +
+  scale_fill_gradient2(
+    low = "blue", high = "red", mid = "white",
+    midpoint = 0, limit = c(-1, 1), name = "Loading"
+  ) +
   theme_minimal() +
-  ggtitle("Heatmap Kontribusi Variabel pada Komponen Utama") +
+  ggtitle("PCA Loadings Heatmap (Variable Contributions to PCs)") +
   xlab("Principal Components") +
   ylab("Features") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-# Cek jumlah kluster yang sesuai menggunakan WSS dan Silhouette
-1. Metode WSS (Elbow method) digunakan untuk menentukan jumlah cluster yang optimal dengan metode "within-cluster sum of squares" (WSS), yang mencari titik di mana penurunan WSS mulai melambat.
-2. Metode Silhoutte memvisualisasikan koefisien siluet untuk setiap jumlah cluster yang diuji, yang membantu menilai kualitas pemisahan antar cluster, di mana nilai siluet yang lebih tinggi menunjukkan pemisahan yang lebih baik.
+## 5.4 PCA Results
+
+Principal Component Analysis (PCA) was applied to the selected normalized indicators to summarize the multivariate structure using a smaller set of orthogonal components. The scree plot (eigenvalues) indicates how much total variance is captured by each principal component (PC). Interpretation typically emphasizes the first PCs because they retain the largest share of information and thus represent the dominant latent dimensions in the data.
+
+The loading matrix (and variable contribution plot) supports substantive interpretation of PC axes. Variables with larger **absolute loadings** contribute more strongly to a component; the **sign** indicates whether the variable increases or decreases along that component. In practical terms, PC1 and PC2 can be interpreted as composite indices that reflect joint patterns across healthcare capacity (hospital beds), clinical severity/outcomes (mortality), intervention/treatment profile (treatment type), and socio-educational context (education index). The heatmap of loadings provides a compact view of which variables align with each PC and whether their relationships are concordant (same sign) or contrasting (opposite sign).
+
+Overall, PCA reduces redundancy among correlated variables and provides a lower-dimensional representation that is suitable for downstream clustering, while preserving the primary covariance structure of the Germany–2024–COVID-19 subset.
+
+# 6. Selecting the Number of Clusters (WSS & Silhouette)
+
+We evaluate candidate cluster counts using:
+1. **WSS (Elbow method)**: looks for a diminishing return point where adding clusters yields small WSS reduction.
+2. **Silhouette**: prefers the `k` with the highest average silhouette width (better cohesion/separation).
 
 ```{r}
 cluster_data <- german_data_pca
 
 fviz_nbclust(cluster_data, kmeans, method = "wss")
-fviz_nbclust(cluster_data, kmeans, method="silhouette")
+fviz_nbclust(cluster_data, kmeans, method = "silhouette")
 ```
-Hasil metode wss dan silhouette menyarankan bahwa jumlah kluster terbaik untuk dataset ini adalah 2, karena menghasilkan elbow pada k=2 pada wss dan memberikan rata-rata nilai silhouette tertinggi. 
 
+**Interpretation:**  
+Both WSS and silhouette diagnostics suggest **k = 2** as the most appropriate partition for this dataset.
 
-# K-Means Clustering
-metode k-means digunakan untuk membagi data menjadi 2 kluster sesuai dengan hasil elbow method, dengan algoritma dijalankan sebanyak 25 kali (nstart=25) untuk memastikan hasil terbaik dengan nilai WSS terendah.
+# 7. K-Means Clustering (k = 2)
+
+K-means is performed with `nstart = 25` to mitigate sensitivity to initialization and to select a solution with lower within-cluster variance.
+
 ```{r}
-cluster_data <- scale(cluster_data)
-k4 <- kmeans(cluster_data, centers = 2, nstart = 25)
-k4
+cluster_data_scaled <- scale(cluster_data)
+
+k2 <- kmeans(cluster_data_scaled, centers = 2, nstart = 25)
+k2
 ```
 
-# Visualisasi Clustering
-Visualisasikan hasil k-means clustering dengan fviz_cluster()
+# 8. Cluster Visualization
+
 ```{r}
-fviz_cluster(k4, data=german_data_pca)
+fviz_cluster(k2, data = cluster_data_scaled)
 ```
-Dari hasil clustering didapat 2 cluster:
-1. Cluster 1: Mortalitas tinggi, pengobatan spesifik dominan, pendidikan tinggi, tetapi fasilitas rumah sakit lebih terbatas.
 
-2. Cluster 2: Mortalitas rendah, fasilitas rumah sakit lebih baik, tetapi pengobatan spesifik kurang dominan dan tingkat pendidikan lebih rendah.
+# 9. Cluster Profiling (Mean Summary Table)
+
+To substantiate cluster interpretations, we compute the **mean** of each PCA input variable by cluster.
+All values below are on the **normalized scale (0–1)**, enabling direct comparison across variables.
+
+```{r}
+cluster_profile <- cbind(
+  Cluster = factor(k2$cluster),
+  german_data_pca
+)
+
+cluster_means <- aggregate(. ~ Cluster, data = cluster_profile, FUN = mean)
+
+knitr::kable(
+  cluster_means,
+  digits = 4,
+  caption = "Cluster Mean Profile (Normalized Features Used in PCA)"
+)
+```
+
+# 10. K-Means Results
+
+K-means clustering was performed on the selected normalized indicators and applied in a standardized feature space (z-scores) to ensure that each variable contributed comparably to the Euclidean distance metric used by the algorithm. The number of clusters was chosen as **k = 2**, supported by both the elbow method (WSS), which suggested diminishing marginal improvement beyond two clusters, and silhouette analysis, which favored the solution with stronger cohesion and separation.
+
+Interpretation of the cluster solution is anchored in the **cluster mean profile** (Table above). Because the variables are normalized to the same range, differences in cluster means can be compared directly. In particular, the cluster with a higher mean on **Mortality.Rate....** corresponds to a *higher-mortality* profile, while the cluster with a lower mortality mean corresponds to a *lower-mortality* profile. Differences in **Hospital.Beds.per.1000** capture contrasts in healthcare capacity, whereas **Education.Index** reflects socio-educational context, and **Treatment.Type** (as an encoded categorical variable) summarizes shifts in the dominant treatment category within each cluster.
+
+Taken together, the two clusters represent distinct empirical profiles within the Germany–2024–COVID-19 subset. This segmentation provides a concise basis for comparing outcome severity and system capacity indicators, and it enables clearer interpretation of heterogeneity in the observations under study.
+
