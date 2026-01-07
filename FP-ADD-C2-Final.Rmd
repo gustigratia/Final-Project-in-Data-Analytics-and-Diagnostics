@@ -1,0 +1,199 @@
+---
+title: "FP-ADD-KelompokC2"
+author: "1. Rafindra Nabiel Fawwaz_5026231024
+         2. Gusti Gratia Delpiera_5026231097
+         3. M. Naufal Erwin Effendi_5026231152
+         4. Gabriel Hadi Melvanto Sihaloho_5026231189"
+date: "2024-12-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import semua library yang dibutuhkan. 
+Disini digunakan 5 library, yaitu cluster untuk analisis clustering, factoextra untuk visualisasi dari hasil clustering, reshape digunakan untuk data reshaping agar mempermudah manipulasi data sebelum analisis, ggplot digunakan untuk membuat visualisasi data
+
+```{r}
+library(cluster)
+library(factoextra)
+library(reshape2)
+library(ggplot2)
+```
+
+# DATA PREPARATION
+# Import Dataset
+```{r}
+data <- read.csv("Global Health Statistics.csv")
+data
+```
+
+# Filtering Data
+Filter dataset hanya untuk negara Jerman dengan kasus COVID-19 tahun 2024, dan filter kolom yang tidak diperlukan seperti Country, Year, Disease Category dan Disease Name
+```{r}
+german_data <- subset(data, Country=="Germany")
+german_data <- subset(german_data, Year == 2024)
+german_data <- subset(german_data, Disease.Name == "COVID-19")
+german_data_filtered <- subset(german_data, select = -c(Country,Year,Disease.Category,Disease.Name))
+german_data_filtered
+dim(german_data_filtered)
+
+```
+
+# Melihat Ringkasan Statistik dataset dan dimensi dataset
+Dalam ringkasan statistik, dapat dilihat bahwa beberapa kolom masih memiliki tipe data berupa character sehingga perlu dilakukan encoding/label agar semua data memiliki tipe yang sama untuk memudahkan proses analisis
+```{r}
+summary(data)
+dim(data)
+```
+
+
+# Proses Encoding
+Ubah semua kolom yang masih bertipe karakter menjadi tipe numerik dengan encoding yaitu, mengonversi nilai kategorikalnya menggunakan fungsi factor sehingga didapatkan label:
+GENDER: Female  : 1
+        Male    : 2
+        Other   : 3
+
+Treatment Type:   Medication        : 1
+                  Surgery           : 2
+                  Therapy           : 3
+                  Vaccination       : 4
+                  
+Age Group:    0 - 18    : 1
+              19 - 35   : 2
+              36 - 60   : 3
+              61+       : 4
+              
+Availability of Vaccines treatment:   No: 1
+                                      Yes: 2
+```{r}
+columns_to_factorize <- c("Age.Group", "Gender", "Treatment.Type", "Availability.of.Vaccines.Treatment")
+
+german_data_filtered[columns_to_factorize] <- lapply(german_data_filtered[columns_to_factorize], function(x) as.numeric(factor(x)))
+
+sapply(german_data_filtered, class)
+```
+
+# Melihat dimensi dataset dan cek nilai minimum, maksimum, rata-rata, dan standar deviasi tiap kolom
+```{r}
+summary(german_data_filtered)
+dim(german_data_filtered)
+```
+
+# OUTLIER DETECTION
+
+# Buat boxplot untuk setiap fitur/kolom
+Buat visualisasi boxplot untuk semua variabel dalam dataset german_data_filtered, reshape2::melt digunakan untuk mengubah data ke format panjang, dan menggunakan ggplot2 untuk memplot setiap variabel dengan skala bebas pada grid menggunakan facet_wrap. Boxplot digunakan untuk melihat adanya outlier dalam data
+```{r}
+
+boxplot_german <- reshape2::melt(german_data_filtered)
+
+ggplot(boxplot_german, aes(x = variable, y = value)) + 
+  geom_boxplot() +
+  labs(x = "Variable", y = "Value") +
+  facet_wrap(~variable, scales = "free") +
+  theme(axis.text.x = element_text(angle = 0,hjust=1))
+```
+Berdasarkan visualisasi boxplot, semua nilai dalam setap kolom berada dalam rentang whisker tanpa adanya titik-titik data di luar whisker, menunjukkan bahwa tidak terdeteksi adanya outlier pada variabel-variabel dalam dataset ini. Distribusi setiap variabel tampak konsisten dengan nilai-nilai yang berada dalam rentang normal dan sesuai dengan batas interkuartil.
+
+
+# Buat Histogram untuk setiap fitur / kolom
+Buat Histogram untuk tiap kolom dengan function hist, visualisasi histogram digunakan untuk melihat distribusi tiap kolom.
+```{r}
+for (col_name in names(german_data_filtered)) {
+  # Buat histogram
+  hist(german_data_filtered[[col_name]],
+       main = paste("Histogram of", col_name), 
+       xlab = col_name,                        
+       ylab = "Frequency",                     
+       col = "lightblue",
+       border = "black")
+}
+```
+Hasil visualisasi histogram untuk setiap kolom menunjukkan bahwa distribusi data antar kolom sangat bervariasi, baik dari segi rentang nilai maupun pola distribusinya. Oleh karena itu, diperlukan normalisasi data untuk memastikan semua variabel berada pada skala yang sebanding, sehingga analisis lebih lanjut dapat dilakukan secara lebih akurat.
+
+
+# DATA NORMALIZATION
+# Normalisasi data dengan minmax scaling
+Normalisasi pada semua kolom dalam dataset dengan mengonversi nilainya ke rentang 0 hingga 1. Hasilnya, dataset saat ini memiliki nilai yang distandarisasi, sehingga setiap kolom dapat dibandingkan secara sebanding tanpa dipengaruhi oleh perbedaan skala aslinya.
+```{r}
+german_data_normalized <- german_data_filtered
+cols_to_normalize <- c("Prevalence.Rate....", "Incidence.Rate....", "Mortality.Rate....", 
+                       "Gender", "Population.Affected", "Healthcare.Access....",
+                       "Doctors.per.1000", "Hospital.Beds.per.1000", "Treatment.Type", 
+                       "Average.Treatment.Cost..USD.", "Availability.of.Vaccines.Treatment", 
+                       "Recovery.Rate....", "Improvement.in.5.Years....", "DALYs",
+                       "Per.Capita.Income..USD.", "Education.Index", "Urbanization.Rate....", "Age.Group")
+
+# Normalisasi semua kolom yang terpilih
+german_data_normalized[cols_to_normalize] <- lapply(german_data_normalized[cols_to_normalize], function(x) {
+  (x - min(x)) / (max(x) - min(x))
+})
+german_data_normalized
+```
+
+# Principal Component Analysis
+Lakukan analisis PCA (Principal Component Analysis) pada subset data yang mencakup variabel "Hospital.Beds.per.1000," "Mortality.Rate," "Treatment.Type," dan "Education.Index," dengan data yang telah dinormalisasi. Fungsi prcomp() digunakan untuk menghitung komponen utama, dan summary(pca_result) memberikan ringkasan variansi yang dijelaskan oleh setiap komponen utama, termasuk proporsi variansi yang dijelaskan oleh masing-masing komponen.
+```{r}
+german_data_pca <- subset(german_data_normalized, select = c(Hospital.Beds.per.1000, Mortality.Rate...., Treatment.Type, Education.Index))
+pca_result <- prcomp(german_data_pca, center = TRUE, scale. = TRUE)
+pca_result
+summary(pca_result)
+```
+
+# Visualisasi Contribution PCA
+fviz_eig digunakan untuk memvisualisasikan eigenvalue atau proporsi variansi yang dijelaskan oleh masing-masing komponen utama dalam analisis PCA. visualisasikan kontribusi masing-masing variabel terhadap dua komponen utama pertama menggunakan fviz_pca_var, dengan warna yang menunjukkan kontribusi variabel, serta menggunakan fungsi repel untuk menghindari tumpang tindih label variabel.
+```{r}
+#PCA Result dengan Contribution
+fviz_eig(pca_result)
+fviz_pca_var(pca_result, axes = c(1,2), col.var = "contrib", gradient.cols = c("#00AFBB","#E7B800","#FC4E07"),repel = TRUE)
+```
+
+# Visualisasi Heatmap PCA
+Buat heatmap yang menunjukkan kontribusi setiap variabel terhadap komponen utama berdasarkan hasil PCA.     
+```{r}
+pca_loadings <- as.data.frame(pca_result$rotation)
+pca_loadings$Variable <- rownames(pca_loadings)
+melted_loadings <- melt(pca_loadings, id.vars = "Variable")
+ggplot(melted_loadings, aes(x = variable, y = Variable, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), name = "Contribution") +
+  theme_minimal() +
+  ggtitle("Heatmap Kontribusi Variabel pada Komponen Utama") +
+  xlab("Principal Components") +
+  ylab("Features") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# Cek jumlah kluster yang sesuai menggunakan WSS dan Silhouette
+1. Metode WSS (Elbow method) digunakan untuk menentukan jumlah cluster yang optimal dengan metode "within-cluster sum of squares" (WSS), yang mencari titik di mana penurunan WSS mulai melambat.
+2. Metode Silhoutte memvisualisasikan koefisien siluet untuk setiap jumlah cluster yang diuji, yang membantu menilai kualitas pemisahan antar cluster, di mana nilai siluet yang lebih tinggi menunjukkan pemisahan yang lebih baik.
+
+```{r}
+cluster_data <- german_data_pca
+
+fviz_nbclust(cluster_data, kmeans, method = "wss")
+fviz_nbclust(cluster_data, kmeans, method="silhouette")
+```
+Hasil metode wss dan silhouette menyarankan bahwa jumlah kluster terbaik untuk dataset ini adalah 2, karena menghasilkan elbow pada k=2 pada wss dan memberikan rata-rata nilai silhouette tertinggi. 
+
+
+# K-Means Clustering
+metode k-means digunakan untuk membagi data menjadi 2 kluster sesuai dengan hasil elbow method, dengan algoritma dijalankan sebanyak 25 kali (nstart=25) untuk memastikan hasil terbaik dengan nilai WSS terendah.
+```{r}
+cluster_data <- scale(cluster_data)
+k4 <- kmeans(cluster_data, centers = 2, nstart = 25)
+k4
+```
+
+# Visualisasi Clustering
+Visualisasikan hasil k-means clustering dengan fviz_cluster()
+```{r}
+fviz_cluster(k4, data=german_data_pca)
+```
+Dari hasil clustering didapat 2 cluster:
+1. Cluster 1: Mortalitas tinggi, pengobatan spesifik dominan, pendidikan tinggi, tetapi fasilitas rumah sakit lebih terbatas.
+
+2. Cluster 2: Mortalitas rendah, fasilitas rumah sakit lebih baik, tetapi pengobatan spesifik kurang dominan dan tingkat pendidikan lebih rendah.
